@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<library path="nav2_abc_pso_planner">
+  <class name="nav2_abc_pso_planner/ABCPSOPlanner" 
+         type="nav2_abc_pso_planner::ABCPSOPlanner" 
+         base_class_type="nav2_core::GlobalPlanner">
+    <description>Global planner plugin using ABC + PSO hybrid optimization algorithm.</description>
+  </class>
+</library>
+

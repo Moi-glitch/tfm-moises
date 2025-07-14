@@ -1,0 +1,10 @@
+---
+/explore_controller:
+  ros__parameters:
+    name_object_thr: 0.05
+    I_min: 200.0
+    I_max: 6000.0
+    bw_min: 0.01
+    bw_max: 0.45 
+    cluster_radius: 10
+    yaml_file_path: "detected_objects.yaml"

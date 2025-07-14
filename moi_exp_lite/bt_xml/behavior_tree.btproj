@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="3" project_name="Project">
+    <include path="bt.xml"/>
+    <!-- Description of Node Models (used by Groot) -->
+    <TreeNodesModel>
+        <Condition ID="HaveThreeDetections"/>
+        <Decorator ID="RepeatUntilSuccess" editable="true"/>
+        <Action ID="ReturnToInitialPose"/>
+        <Action ID="StartDetectObject"/>
+        <Action ID="StartExploreController"/>
+        <Action ID="StartExplorer"/>
+        <Action ID="StopExplorer"/>
+    </TreeNodesModel>
+</root>

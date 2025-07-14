@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <!-- Launch the perception and exploration nodes -->
+      <Action ID="StartDetectObject"/>
+      <Action ID="StartExploreController"/>
+      <Action ID="StartExplorer"/>
+
+      <!-- Continue exploring until three red objects are detected -->
+      <RepeatUntilSuccess>
+        <Condition ID="HaveThreeDetections"/>
+      </RepeatUntilSuccess>
+
+      <!-- After detecting three objects return to the initial pose -->
+      <Action ID="StopExplorer"/>
+      <Action ID="ReturnToInitialPose"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <TreeNodesModel>
+    <Action ID="StartDetectObject"/>
+    <Action ID="StartExploreController"/>
+    <Action ID="StartExplorer"/>
+    <Condition ID="HaveThreeDetections"/>
+    <Action ID="StopExplorer"/>
+    <Action ID="ReturnToInitialPose"/>
+  </TreeNodesModel>
+</root>
+

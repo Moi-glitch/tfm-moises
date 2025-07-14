@@ -1,0 +1,40 @@
+# === ROS 2 build artifacts ===
+build/                  # colcon build folder
+install/                # colcon install folder
+log/                    # runtime/log folder
+.ros/                   # ros2 bag recordings, logs, etc.
+
+# === CMake / colcon ===
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# === Python artifacts ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# === Test / coverage ===
+.pytest_cache/
+coverage/
+htmlcov/
+
+# === IDEs & Editor configs ===
+.vscode/
+.idea/
+
+# === OS cruft ===
+.DS_Store
+Thumbs.db
+*~
+
+# === Optional local envs ===
+.env
+venv/
+
