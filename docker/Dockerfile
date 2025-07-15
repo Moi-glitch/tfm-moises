@@ -28,8 +28,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 3) GUI extras (X11 apps)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      x11-apps \
+      x11-apps xauth \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Ensure GUI apps like Gazebo can connect to the host display
+ENV QT_X11_NO_MITSHM=1
 
 # 4) Python libs you need
 RUN pip3 install \
