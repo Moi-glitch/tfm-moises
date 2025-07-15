@@ -43,10 +43,8 @@ WORKDIR /opt/turtlebot3_ws
 RUN mkdir src
 COPY . src/
 
-# 6) Bring in your package-specific rosdep script
+# 6) Bring in turtlebot3_autorace (for camera calibration launch files)
 RUN git clone https://github.com/ROBOTIS-GIT/turtlebot3_autorace.git src/turtlebot3_autorace
-COPY moi_exp_lite/rosdep_install.sh /rosdep_install.sh
-RUN chmod +x /rosdep_install.sh
 
 
 # Remove ament_python from package.xml so rosdep won't choke on it
@@ -54,17 +52,19 @@ RUN sed -i '/<buildtool_depend>ament_python<\/buildtool_depend>/d' src/moi_exp_l
  && sed -i '/<depend>ament_python<\/depend>/d'          src/moi_exp_lite/package.xml
 
 # 7) Install all dependencies & build
-# 7) Install all dependencies & build
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
-    # a) deps for moi_exp_lite
-    cd src/moi_exp_lite && /rosdep_install.sh && cd ../.. && \
-    # b) rest of workspace deps (skip problematic keys) + build
+    # a) deps for moi_exp_lite (skip unavailable camera package)
     rosdep update && \
+    rosdep install --from-paths src/moi_exp_lite \
+                   --ignore-src \
+                   --skip-keys turtlebot3_autorace_camera \
+                   -y && \
+    # b) rest of workspace deps (skip problematic keys) + build
     rosdep install --from-paths src \
                    --ignore-src \
                    -r \
                    --skip-keys ament_python \
-                   --skip-keys turtlebot3-autorace-camera \
+                   --skip-keys turtlebot3_autorace_camera \
                    -y && \
     colcon build --symlink-install
 
