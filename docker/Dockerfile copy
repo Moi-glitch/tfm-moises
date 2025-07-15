@@ -1,0 +1,55 @@
+# Dockerfile for TurtleBot3 Simulation Workspace
+
+# Use ROS 2 Humble desktop base
+ARG ROS_DISTRO=humble
+FROM osrf/ros:${ROS_DISTRO}-desktop AS base
+ENV ROS_DISTRO=${ROS_DISTRO}
+
+SHELL ["/bin/bash", "-c"]
+
+# Install OS dependencies and ROS packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git libcanberra-gtk-module libcanberra-gtk3-module fuse3 libfuse2 libqt5svg5-dev \
+    python3-pip python3-colcon-common-extensions python3-rosdep python3-vcstool build-essential \
+    ros-humble-turtlebot3-simulations \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Allow GUI applications to connect to the host's X server
+ENV DISPLAY=:0
+ENV QT_X11_NO_MITSHM=1
+
+# Install additional dependencies for GUI applications
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    x11-apps \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install Python modules
+RUN pip3 install numpy==1.21.6 scipy==1.7.3 matplotlib==3.5.1 transforms3d==0.4.1
+
+# Create and build workspace
+WORKDIR /opt/turtlebot3_ws
+RUN mkdir src
+COPY . src/
+
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    rosdep update && \
+    rosdep install --from-paths src --ignore-src -r -y && \
+    colcon build --symlink-install
+
+# Set TurtleBot3 model (simulation)
+ENV TURTLEBOT3_MODEL=burger_cam
+
+# Copy & normalize entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends dos2unix \
+ && dos2unix /entrypoint.sh \
+ && sed -i '1s/^\xEF\xBB\xBF//' /entrypoint.sh \
+ && chmod +x /entrypoint.sh \
+ && rm -rf /var/lib/apt/lists/*
+
+# Default entrypoint & cmd
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["bash"]
+
+
