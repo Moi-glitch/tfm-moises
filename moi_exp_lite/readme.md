@@ -1,74 +1,186 @@
-# moi_exp_lite
+# tfm-moises
 
-This repository provides the `moi_exp_lite` ROS 2 package. It contains a C++
-implementation of the explore-lite algorithm along with Python nodes for
-traffic-light detection and a controller used during exploration. The package
-is mainly targeted at the TurtleBot3 platform.
+Este repositorio contiene varios paquetes ROS&nbsp;2 utilizados durante un Trabajo Fin de Máster.
+Los paquetes están pensados para trabajar con el robot TurtleBot3 y se pueden
+compilar tanto de forma local como mediante el Dockerfile incluido.
 
-## Project overview
+## Contenido del repositorio
 
-The main workflow is:
+- **moi_exp_lite** – implementación del algoritmo explore-lite junto con nodos
+  en Python para la detección de semáforos y un controlador de exploración.
+- **nav2_abc_pso_planner** y **nav2_abc_pso_planner_exp_area** – plugins de
+  planificación global para Nav2 basados en los métodos ABC y PSO.
+- **docker/** – Dockerfile y script de entrada que permiten crear un entorno de
+  simulación listo para usar.
 
-1. **Exploration** – the `explore_node` (C++) searches for frontiers in the
-   navigation costmap and publishes navigation goals.
-2. **Traffic-light detection** – `detect_object` (Python) processes the
-   camera feed and publishes detections on `/color_detection`.
-3. **Explore controller** – `explore_controller` (Python) listens for detections,
-   transforms them into the map frame and publishes RViz markers. Detected
-   objects are stored in `detected_objects.yaml`.
+A continuación se describen los pasos para instalar los paquetes en un
+workspace local y las instrucciones para usar la imagen Docker.
 
-Launch files under `launch/` provide scripts to start these nodes individually
-or together. `moi_exploration.launch.py` runs the full calibration and
-exploration sequence.
+## Instalación en local
 
-## Building the package
+1. **Instalar dependencias básicas**
 
-Before building, install all system and ROS dependencies declared in
-`package.xml`.  A helper script is provided which runs `rosdep` for you:
+   Se recomienda utilizar Ubuntu&nbsp;22.04 con ROS&nbsp;2 Humble ya instalado.
+   Además, asegúrate de contar con `git`, `rosdep` y las extensiones de colcon:
 
-```bash
-./rosdep_install.sh
-```
+   ```bash
+   sudo apt install git python3-colcon-common-extensions python3-rosdep
+   ```
 
-This command updates the rosdep database and installs any missing packages
-required by `moi_exp_lite`.  The script expects that your ROS distribution is
-already installed and that you have permission to use `sudo` for package
-installation.
+   Inicializa rosdep si todavía no lo has hecho:
 
-Build with `colcon` from the workspace root:
+   ```bash
+   sudo rosdep init
+   rosdep update
+   ```
 
-```bash
-colcon build --symlink-install
-```
+2. **Crear un workspace y clonar el repositorio**
+
+   ```bash
+   mkdir -p ~/turtlebot3_ws/src
+   cd ~/turtlebot3_ws/src
+   git clone <URL_DEL_REPOSITORIO> tfm-moises
+   cd ..
+   ```
+
+3. **Instalar las dependencias de los paquetes**
+
+   Desde la raíz del workspace ejecuta:
+
+   ```bash
+   rosdep install --from-paths src --ignore-src -r -y \
+       --skip-keys ament_python --skip-keys turtlebot3_autorace_camera
+   ```
+
+   Este repositorio incluye el script `rosdep_install.sh` para instalar de forma
+   sencilla todas las dependencias de los paquetes:
+
+   ```bash
+   cd src/tfm-moises
+   ./rosdep_install.sh
+   cd ..
+   ```
+
+4. **Compilar el workspace**
+
+   ```bash
+   colcon build --symlink-install
+   ```
 
 
-## Running the nodes
+## Uso con Docker
 
-Two standalone launch files are provided:
+La carpeta `docker/` proporciona un Dockerfile que compila todos los paquetes
+y configura la simulación de TurtleBot3.
 
-* `explore.launch.py` – starts the `explore_node` from this package. Optional
-  arguments allow setting a parameter file and toggling use of simulated time.
-  Example:
-  ```bash
-  ros2 launch moi_exp_lite explore.launch.py
-  ```
-* `detect_object.launch.py` – launches the colour detector. The argument
-  `calibration_mode` can be set to `True` or `False`:
-  ```bash
-  ros2 launch moi_exp_lite detect_object.launch.py calibration_mode:=False
-  ```
+1. **Construir la imagen**
 
-The `moi_exploration.launch.py` script chains calibration, detection and
-exploration together.
+   Ejecuta desde la raíz del repositorio:
 
-## Configuration notes
+   ```bash
+   docker build -t tfm-moises -f docker/Dockerfile .
+   ```
 
-The package is self-contained and does not rely on absolute paths.  All
-parameter files, maps and behavior-tree XML are installed under the package
-share directory.  Launch files resolve these resources at runtime so the
-package can be built in any workspace.
+   Puedes cambiar la distribución de ROS pasando el argumento `--build-arg`:
 
-The Behavior Tree visualiser (`groot2`) can be overridden via the
-`GROOT2_EXECUTABLE` environment variable.  If the variable is not set the
-default `groot2` executable is used.
+   ```bash
+   docker build --build-arg ROS_DISTRO=humble -t tfm-moises .
+   ```
+
+2. **Lanzar un contenedor**
+
+   Para visualizar Gazebo y RViz es necesario permitir el acceso a X11 y usar la
+   red del host:
+
+   ```bash
+   xhost +local:root
+   docker run --rm -it --net=host \
+       -e DISPLAY=$DISPLAY \
+       -v /tmp/.X11-unix:/tmp/.X11-unix \
+       tfm-moises
+   ```
+
+   La variable `TURTLEBOT3_MODEL` puede fijarse para elegir el modelo (por
+   defecto `burger_cam`):
+
+   ```bash
+   docker run --rm -it --net=host \
+       -e DISPLAY=$DISPLAY \
+       -e TURTLEBOT3_MODEL=waffle \
+       -v /tmp/.X11-unix:/tmp/.X11-unix \
+       tfm-moises
+   ```
+
+3. **Ejecutar dentro del contenedor**
+
+   El `entrypoint` carga automáticamente ROS&nbsp;2 y el workspace en
+   `/opt/turtlebot3_ws`. Ya dentro del contenedor se pueden lanzar los nodos de
+   la misma forma que en una instalación local:
+
+   ```bash
+   ros2 launch moi_exp_lite moi_exploration.launch.py
+   ```
+
+Con estos pasos puedes trabajar con los paquetes de este repositorio tanto en
+un entorno local como dentro de un contenedor Docker.
+
+## Ejemplos de ejecución
+
+   Primero de todo, crear un mundo en gazebo y colocar objetos rojos en él.
+
+
+   ```bash
+   source /opt/ros/humble/setup.bash
+   source install/setup.bash
+   export TURTLEBOT3_MODEL=burger_cam
+
+   export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:/opt/ros/humble/share/turtlebot3_gazebo/models
+
+   ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
+   ```
+
+   Después tenemos dos aplicaciones, con Behavior Tree y sin Behavior Tree.
+
+   **moi_exploration.launch.py (sin behavior tree)**
+
+   Para el explorer con detección de objetos:
+
+   ```bash
+   source install/setup.bash
+
+   ros2 launch slam_toolbox online_async_launch.py use_sim_time:=True
+   ```
+   Después en nueva terminal:
+
+   ```bash
+   ros2 launch nav2_bringup navigation_launch.py params_file:=/home/gici/turtlebot3_ws/src/tfm-moises/moi_exp_lite/nav2_param/abc_pso.yaml use_sim_time:=True
+   ```
+   Puedes elegir el planner que quieras de los tres disponibles. Sin embargo abc_pso_exp_area no funciona aún correctamente.
+
+   Tras esto, iniciamos rviz:
+
+   ```bash
+   ros2 run rviz2 rviz2 -d $(ros2 pkg prefix nav2_bringup)/share/nav2_bringup/rviz/nav2_default_view.rviz
+   ```
+
+   Por último, ejecutamos el explorer con el detector de objetos:
+
+   ```bash
+   ros2 launch moi_exp_lite moi_exploration.launch.py use_sim_time:=True
+   ```
+
+   **bt_launch.py (behavior tree)**
+
+   Mismo procedimiento que con el explorador normal pero esta vez el último paso en vez de ser moi_exploration.launch.py es el siguiente:
+
+   ```bash
+    ros2 launch moi_exp_lite bt_launch.py use_sim_time:=True
+   ```
+
+
+
+
+   
+
+
 
