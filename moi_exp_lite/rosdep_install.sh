@@ -11,4 +11,4 @@ fi
 
 # Update rosdep and install dependencies listed in package.xml
 rosdep update
-rosdep install --from-paths . --ignore-src -y
+rosdep install --from-paths . --ignore-src -y -r --skip-keys ament_python --skip-keys turtlebot3_autorace_camera 
