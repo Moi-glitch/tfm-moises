@@ -52,13 +52,13 @@ workspace local y las instrucciones para usar la imagen Docker.
        --skip-keys ament_python --skip-keys turtlebot3_autorace_camera
    ```
 
-   El paquete `moi_exp_lite` dispone además del script `rosdep_install.sh` para
-   instalar solo sus dependencias:
+   Este repositorio incluye el script `rosdep_install.sh` para instalar de forma
+   sencilla todas las dependencias de los paquetes:
 
    ```bash
-   cd src/tfm-moises/moi_exp_lite
+   cd src/tfm-moises
    ./rosdep_install.sh
-   cd ../../..
+   cd ..
    ```
 
 4. **Compilar el workspace**
