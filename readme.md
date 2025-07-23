@@ -7,9 +7,9 @@ compilar tanto de forma local como mediante el Dockerfile incluido.
 ## Contenido del repositorio
 
 - **moi_exp_lite** – implementación del algoritmo explore-lite junto con nodos
-  en Python para la detección de semáforos y un controlador de exploración.
+  en Python para la detección de objetos rojos y un controlador de exploración.
 - **nav2_abc_pso_planner** y **nav2_abc_pso_planner_exp_area** – plugins de
-  planificación global para Nav2 basados en los métodos ABC y PSO.
+  planificación global para Nav2 basados en los métodos ABC y PSO. El primer plugin está listo para ser usado, el segundo plugin no funciona muy bien y necesita trabajarse más.
 - **docker/** – Dockerfile y script de entrada que permiten crear un entorno de
   simulación listo para usar.
 
@@ -106,7 +106,7 @@ y configura la simulación de TurtleBot3.
    ```bash
    docker run --rm -it --net=host \
        -e DISPLAY=$DISPLAY \
-       -e TURTLEBOT3_MODEL=waffle \
+       -e TURTLEBOT3_MODEL=burger_cam \
        -v /tmp/.X11-unix:/tmp/.X11-unix \
        tfm-moises
    ```
