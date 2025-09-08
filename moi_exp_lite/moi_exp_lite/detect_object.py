@@ -16,6 +16,8 @@
 #
 # Author: Leon Jung, Gilbert, Ashe Kim, ChanHyeong Lee
 
+# Nodo de ROS 2 encargado de detectar objetos de color rojo en la imagen de la cámara
+
 import time
 import math
 
@@ -32,10 +34,10 @@ from sensor_msgs.msg import CompressedImage
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
-# Camera parameters
-IMAGE_WIDTH = 320           # px (update based on your camera resolution)
+# Parámetros de la cámara
+IMAGE_WIDTH = 320           # px (actualizar según la resolución de la cámara)
 CENTER_X = IMAGE_WIDTH / 2  # px
-FOV_H_DEG = 120.0           # degrees (horizontal field of view)
+FOV_H_DEG = 120.0           # grados (campo de visión horizontal)
 FOV_H_RAD = math.radians(FOV_H_DEG)
 
 
@@ -182,7 +184,7 @@ class DetectObject(Node):
     def find_traffic_light(self):
         self.detect_red_traffic_light()
 
-        # Publish the image with visualizations to the /image_traffic_light topic
+        # Publicar la imagen con visualizaciones en el tópico /image_traffic_light
         if self.pub_image_type == 'compressed':
             self.pub_image_traffic_light.publish(
                 self.cvBridge.cv2_to_compressed_imgmsg(self.cv_image, 'jpg'))
@@ -192,114 +194,114 @@ class DetectObject(Node):
 
     def pixel_to_angle(self, x_pixel: int) -> float:
         """
-        Converts the x pixel coordinate (0…IMAGE_WIDTH-1) into an angle [rad]
-        relative to the optical axis (0 at the center, positive to the right).
+        Convierte la coordenada x del píxel (0…IMAGE_WIDTH-1) en un ángulo [rad]
+        relativo al eje óptico (0 en el centro, positivo hacia la derecha).
         """
-        dx = x_pixel - CENTER_X  # CENTER_X ensures the center of the image is 0 radians
-        theta = dx * (FOV_H_RAD / IMAGE_WIDTH)  # Scale dx by the field of view in radians
-        return theta  # Return the angle in radians
+        dx = x_pixel - CENTER_X  # CENTER_X garantiza que el centro de la imagen sea 0 radianes
+        theta = dx * (FOV_H_RAD / IMAGE_WIDTH)  # Escala dx según el campo de visión en radianes
+        return theta  # Devuelve el ángulo en radianes
 
     def detect_red_traffic_light(self):
-        # Convert the image to HSV
+        # Convertir la imagen a HSV
         image = np.copy(self.cv_image)
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        # Define the HSV range for red (split into two parts to handle hue wrapping)
-        lower_red_1 = np.array([0, self.saturation_red_l, self.lightness_red_l])  # Range 1: 0–5
+        # Definir el rango HSV para el rojo (en dos partes para manejar el ciclo del tono)
+        lower_red_1 = np.array([0, self.saturation_red_l, self.lightness_red_l])  # Rango 1: 0–5
         upper_red_1 = np.array([5, self.saturation_red_h, self.lightness_red_h])
 
-        lower_red_2 = np.array([175, self.saturation_red_l, self.lightness_red_l])  # Range 2: 175–179
+        lower_red_2 = np.array([175, self.saturation_red_l, self.lightness_red_l])  # Rango 2: 175–179
         upper_red_2 = np.array([179, self.saturation_red_h, self.lightness_red_h])
 
-        # Create masks for both ranges
+        # Crear máscaras para ambos rangos
         mask1 = cv2.inRange(hsv, lower_red_1, upper_red_1)
         mask2 = cv2.inRange(hsv, lower_red_2, upper_red_2)
 
-        # Combine the masks
+        # Combinar las máscaras
         mask = cv2.bitwise_or(mask1, mask2)
 
-        # Apply Gaussian blur to the mask
+        # Aplicar un desenfoque gaussiano a la máscara
         mask = cv2.GaussianBlur(mask, (3, 3), 0)
 
-        # Apply morphological operations
+        # Aplicar operaciones morfológicas
         kernel = np.ones((3, 3), np.uint8)
         mask = cv2.erode(mask, kernel, iterations=1)
         mask = cv2.dilate(mask, kernel, iterations=1)
 
-        # Define the ROI
+        # Definir la ROI (región de interés)
         height, width = mask.shape[:2]
         roi_x_start = int(1/6 * width)
         roi_x_end = int(5/6 * width)
         roi_y_start = height // 3
         roi_y_end = height
 
-        # Create an ROI mask
+        # Crear una máscara para la ROI
         roi_mask = np.zeros_like(mask)
         roi_mask[roi_y_start:roi_y_end, roi_x_start:roi_x_end] = 255
 
-        # Combine the ROI mask with the red mask
+        # Combinar la máscara de la ROI con la máscara roja
         mask = cv2.bitwise_and(mask, roi_mask)
 
-        # Invert the mask
+        # Invertir la máscara
         mask = cv2.bitwise_not(mask)
 
-        # Detect individual red objects
+        # Detectar objetos rojos individuales
         params = cv2.SimpleBlobDetector_Params()
         params.minThreshold = 10
         params.maxThreshold = 255
         params.filterByArea = True
         params.minArea = 700
-        params.maxArea = 500000  # Increase maximum area to allow large objects
-        params.filterByCircularity = True  # Enable circularity filtering
-        params.minCircularity = 0.1       # Set minimum circularity
-        params.filterByConvexity = True   # Enable convexity filtering
-        params.minConvexity = 0.1         # Set minimum convexity
+        params.maxArea = 500000  # Incrementar el área máxima para permitir objetos grandes
+        params.filterByCircularity = True  # Habilitar filtrado por circularidad
+        params.minCircularity = 0.1       # Establecer circularidad mínima
+        params.filterByConvexity = True   # Habilitar filtrado por convexidad
+        params.minConvexity = 0.1         # Establecer convexidad mínima
 
         detector = cv2.SimpleBlobDetector_create(params)
         keypts = detector.detect(mask)
 
-        # Create a copy for visualization
+        # Crear una copia para visualización
         visualization_image = np.copy(self.cv_image)
 
-        # Draw the ROI boundaries on the visualization image
+        # Dibujar los límites de la ROI en la imagen de visualización
         cv2.rectangle(visualization_image, (roi_x_start, roi_y_start), (roi_x_end, roi_y_end), (0, 255, 0), 2)
 
-        # List to store the center of mass for each detected object
+        # Lista para almacenar el centro de masa de cada objeto detectado
         detected_objects = []
 
-        # Visualize detected red objects and calculate center of mass
+        # Visualizar los objetos rojos detectados y calcular el centro de masa
         for i, keypt in enumerate(keypts):
             point_x = int(keypt.pt[0])
             point_y = int(keypt.pt[1])
             detected_objects.append({'id': i, 'x': point_x, 'y': point_y})
 
-            # Calculate the angle of the detected object
+            # Calcular el ángulo del objeto detectado
             angle_rad = self.pixel_to_angle(point_x)
-            angle_deg = math.degrees(angle_rad)  # Convert radians to degrees
+            angle_deg = math.degrees(angle_rad)  # Convertir radianes a grados
 
-            # Draw a green circle at the center of mass on the visualization image
+            # Dibujar un círculo verde en el centro de masa sobre la imagen de visualización
             cv2.circle(visualization_image, (point_x, point_y), 5, (0, 255, 0), -1)
             cv2.putText(visualization_image, f'ID={i}, At {angle_deg:.2f} Deg', (point_x + 10, point_y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-            # Publish the information
+            # Publicar la información
             #timestamp = self.get_clock().now().to_msg().sec
             #self.pub_color.publish(String(data=f"red,angle={angle_rad:.2f},timestamp={timestamp}"))
-            
-            # recommended for gazebo according to chatgpt
+
+            # recomendado para Gazebo según chatgpt
             now = self.get_clock().now().to_msg()
             timestamp = now.sec + now.nanosec * 1e-9
             self.pub_color.publish(String(data=f"red,angle={angle_rad:.2f},timestamp={timestamp:.6f}"))
 
 
-            #self.get_logger().info(f'Red object detected: ID={i}, angle={angle_deg:.2f}°, timestamp={timestamp}')
+            #self.get_logger().info(f'Objeto rojo detectado: ID={i}, angle={angle_deg:.2f}°, timestamp={timestamp}')
 
 
-        # Display the combined mask
+        # Mostrar la máscara combinada
         cv2.imshow("Combined Mask", mask)
         cv2.waitKey(1)
 
-        # Publish the visualization image with markers to the /image_traffic_light topic
+        # Publicar la imagen de visualización con marcadores en el tópico /image_traffic_light
         if self.pub_image_type == 'compressed':
             self.pub_image_traffic_light.publish(
                 self.cvBridge.cv2_to_compressed_imgmsg(visualization_image, 'jpg'))
@@ -307,7 +309,7 @@ class DetectObject(Node):
             self.pub_image_traffic_light.publish(
                 self.cvBridge.cv2_to_imgmsg(visualization_image, 'bgr8'))
 
-        # Publish the mask if in calibration mode
+        # Publicar la máscara si se está en modo de calibración
         if self.is_calibration_mode:
             if self.pub_image_type == 'compressed':
                 self.pub_image_red_light.publish(

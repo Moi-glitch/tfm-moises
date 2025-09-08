@@ -9,6 +9,7 @@
 
 using namespace std::chrono_literals;
 
+// Nodo principal que carga y ejecuta el árbol de comportamiento
 class BTNode : public rclcpp::Node
 {
 public:
@@ -17,26 +18,26 @@ public:
   {
     std::string default_bt =
       ament_index_cpp::get_package_share_directory("moi_exp_lite") + "/bt_xml/bt.xml";
-    this->declare_parameter<std::string>("bt_xml", default_bt);
+    this->declare_parameter<std::string>("bt_xml", default_bt);  // Ruta al archivo del árbol
     if (!this->has_parameter("use_sim_time")) {
-      this->declare_parameter<bool>("use_sim_time", false);
+      this->declare_parameter<bool>("use_sim_time", false);  // Uso de tiempo simulado
     }
-    this->declare_parameter<bool>("enable_groot_monitoring", true);
+    this->declare_parameter<bool>("enable_groot_monitoring", true);  // Activar monitorización con Groot
 
     this->get_parameter("bt_xml", bt_xml_);
     this->get_parameter("enable_groot_monitoring", enable_groot_);
     this->get_parameter("use_sim_time", use_sim_time_);
-    setenv("USE_SIM_TIME", use_sim_time_ ? "true" : "false", 1);
+    setenv("USE_SIM_TIME", use_sim_time_ ? "true" : "false", 1);  // Exportar variable de entorno
 
-    moi_exp_lite::register_bt_nodes(factory_);
-    tree_ = factory_.createTreeFromFile(bt_xml_);
+    moi_exp_lite::register_bt_nodes(factory_);  // Registrar nodos personalizados
+    tree_ = factory_.createTreeFromFile(bt_xml_);  // Construir el árbol desde el fichero
 
     if (enable_groot_) {
-      publisher_ = std::make_shared<BT::PublisherZMQ>(tree_);
+      publisher_ = std::make_shared<BT::PublisherZMQ>(tree_);  // Publicar para Groot
     }
 
     timer_ = this->create_wall_timer(100ms, [this]() {
-      auto status = tree_.tickRoot();
+      auto status = tree_.tickRoot();  // Ejecutar el árbol periódicamente
       if (status == BT::NodeStatus::SUCCESS || status == BT::NodeStatus::FAILURE) {
         RCLCPP_INFO(this->get_logger(),
                     "Behavior tree finished");
@@ -47,10 +48,10 @@ public:
 
   void init_blackboard()
   {
-    tree_.rootBlackboard()->set("node", shared_from_this());
+    tree_.rootBlackboard()->set("node", shared_from_this());  // Compartir puntero del nodo
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);  // Escuchar transformaciones TF
     this->declare_parameter<std::string>("robot_base_frame", "base_link");
     this->get_parameter("robot_base_frame", robot_base_frame_);
 
@@ -63,10 +64,10 @@ public:
         pose.position.x = tf.transform.translation.x;
         pose.position.y = tf.transform.translation.y;
         pose.orientation = tf.transform.rotation;
-        tree_.rootBlackboard()->set("initial_pose", pose);
+        tree_.rootBlackboard()->set("initial_pose", pose);  // Guardar la pose inicial
         break;
       }
-      rclcpp::sleep_for(100ms);
+      rclcpp::sleep_for(100ms);  // Reintentar periódicamente
     }
   }
 

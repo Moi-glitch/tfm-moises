@@ -2,21 +2,22 @@
 import math
 import os
 from collections import deque
-import yaml  # Import the YAML module
+import yaml  # Importar el módulo YAML
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy  # Import QoS settings
+from rclpy.qos import QoSProfile, ReliabilityPolicy  # Importar configuraciones QoS
 from ament_index_python.packages import get_package_share_directory
 from std_msgs.msg import Bool, String
-from sensor_msgs.msg import LaserScan  # For subscribing to /scan
-from visualization_msgs.msg import Marker  # Import for RViz markers
+from sensor_msgs.msg import LaserScan  # Para suscribirse a /scan
+from visualization_msgs.msg import Marker  # Importar marcadores de RViz
 from geometry_msgs.msg import PointStamped
 import time
 import tf2_ros
 from tf2_geometry_msgs import do_transform_point
 from nav_msgs.msg import OccupancyGrid
 
+# Nodo que coordina la exploración y el marcado de objetos detectados
 class ExploreController(Node):
     def __init__(self):
         super().__init__('explore_controller')
@@ -26,7 +27,7 @@ class ExploreController(Node):
         self.use_sim_time = self.get_parameter('use_sim_time').get_parameter_value().bool_value
 
 
-        # Declare parameters
+        # Declarar parámetros
         self.declare_parameter('name_object_thr', 0.05)
         self.declare_parameter('I_min', 200.0)
         self.declare_parameter('I_max', 6000.0)
@@ -34,13 +35,13 @@ class ExploreController(Node):
         self.declare_parameter('bw_max', 0.45)
         self.declare_parameter('cluster_radius', 10)
 
-        # Default path for storing detected objects
+        # Ruta por defecto para guardar objetos detectados
         default_yaml = os.path.join(
             get_package_share_directory('moi_exp_lite'),
             'detected_objects.yaml')
         self.declare_parameter('yaml_file_path', default_yaml)
 
-        # Retrieve parameters
+        # Obtener parámetros
         self.name_object_thr = self.get_parameter('name_object_thr').get_parameter_value().double_value
         self.I_min = self.get_parameter('I_min').get_parameter_value().double_value
         self.I_max = self.get_parameter('I_max').get_parameter_value().double_value
@@ -49,41 +50,41 @@ class ExploreController(Node):
         self.cluster_radius = self.get_parameter('cluster_radius').get_parameter_value().integer_value
         self.yaml_file_path = self.get_parameter('yaml_file_path').get_parameter_value().string_value
 
-        # Resolve path relative to package share if needed
+        # Resolver ruta relativa al paquete si es necesario
         if not os.path.isabs(self.yaml_file_path):
             pkg_share = get_package_share_directory('moi_exp_lite')
             self.yaml_file_path = os.path.join(pkg_share, self.yaml_file_path)
 
-        # Publisher to resume/stop exploration
+        # Publicador para reanudar/detener la exploración
         self.resume_pub = self.create_publisher(Bool, '/explore/resume', 10)
 
-        # Publisher for RViz markers
+        # Publicador de marcadores para RViz
         self.marker_pub = self.create_publisher(Marker, '/visualization_marker', 10)
 
-        # Publisher that notifies when a red object has been marked
+        # Publicador que notifica cuando se marca un objeto rojo
         self.mark_pub = self.create_publisher(Bool, '/object_marked', 10)
 
-        # Add a class attribute to track marker IDs
-        self.marker_id = 0  # Initialize marker ID
+        # Atributo para seguir los IDs de los marcadores
+        self.marker_id = 0  # Inicializar ID de marcador
 
-        # Subscribe to color detections
+        # Suscribirse a detecciones de color
         self.color_sub = self.create_subscription(
             String,
             '/color_detection',
-            self.object_detection,  # Updated method name
+            self.object_detection,  # Método actualizado
             10
         )
 
-        # Subscribe to the costmap for occupancy grid updates
+        # Suscribirse al costmap para actualizaciones de la cuadrícula de ocupación
         self.costmap_sub = self.create_subscription(   
             OccupancyGrid,
             '/move_base/global_costmap/costmap',
             self.costmap_callback,
             10
         )
-        self.latest_costmap = None  # Initialize costmap attribute
+        self.latest_costmap = None  # Inicializar atributo del costmap
 
-        # Subscribe to LiDAR scans with Best Effort QoS and buffer the last 20 messages
+        # Suscribirse a escaneos LiDAR con QoS de mejor esfuerzo y almacenar los últimos 20 mensajes
         self.scan_buffer = deque(maxlen=20)
         scan_qos = QoSProfile(depth=10)
         scan_qos.reliability = ReliabilityPolicy.BEST_EFFORT
@@ -94,34 +95,34 @@ class ExploreController(Node):
             scan_qos
         )
 
-        # Timer to keep exploration running if we haven't stopped yet
+        # Temporizador para mantener la exploración en marcha si no se ha detenido aún
         self.stop_sent = False
         self.timer = self.create_timer(1.0, self.send_resume_if_not_stopped)
 
-        # List to store received color-detection data
+        # Lista para guardar datos de detección de color recibidos
         self.detected_data = []
 
-        # TF buffer and listener for coordinate transformations
+        # Buffer y listener de TF para transformaciones de coordenadas
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
-        # List to store global detections
+        # Lista para almacenar detecciones globales
         self.global_detections = []
 
     def get_robot_global_coordinates(self):
         """
-        Get the global coordinates of the robot in the map frame.
-        Returns a tuple (x_map, y_map) representing the robot's position in the map frame.
+        Obtener las coordenadas globales del robot en el marco del mapa.
+        Devuelve una tupla (x_map, y_map) que representa la posición del robot en el mapa.
         """
         try:
-            # Lookup the transform from the map frame to the robot's base_link frame
+            # Buscar la transformación del marco del mapa al marco base_link del robot
             transform = self.tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time())
-            
-            # Extract the translation (x, y) from the transform
+
+            # Extraer la traslación (x, y) de la transformación
             x_tb3 = transform.transform.translation.x
             y_tb3 = transform.transform.translation.y
 
-            #self.get_logger().info(f"Robot global coordinates: x_map={x_map:.2f}, y_map={y_map:.2f}")
+            #self.get_logger().info(f"Coordenadas globales del robot: x_map={x_tb3:.2f}, y_map={y_tb3:.2f}")
             return x_tb3, y_tb3
 
         except tf2_ros.LookupException:
@@ -131,25 +132,25 @@ class ExploreController(Node):
         except tf2_ros.ExtrapolationException:
             self.get_logger().error("TF extrapolation error: Transform is not available for the requested time.")
 
-        # Return None if the transform fails
+        # Devolver None si la transformación falla
         return None, None
 
     def send_resume_if_not_stopped(self):
-        """Periodically publish a resume command unless a stop was sent."""
+        """Publicar periódicamente un comando de reanudación a menos que ya se haya enviado uno de parada."""
         if not self.stop_sent:
             self.resume_pub.publish(Bool(data=True))
 
 
     def costmap_callback(self, msg: OccupancyGrid):
         """
-        Callback to receive the latest costmap and store it.
-        This can be used for further processing or analysis.
+        Callback para recibir el costmap más reciente y almacenarlo.
+        Puede usarse para procesamientos o análisis posteriores.
         """
         self.latest_costmap = msg
-        #self.get_logger().info(f"Received costmap with resolution {msg.info.resolution} m/pixel and size {msg.info.width}x{msg.info.height} pixels.")
+        #self.get_logger().info(f"Costmap recibido con resolución {msg.info.resolution} m/pixel y tamaño {msg.info.width}x{msg.info.height} píxeles.")
 
     def costmap_to_binary_grid(self, costmap: OccupancyGrid, threshold=99):
-        """Convert the costmap to a 2D grid of 1s (occupied) and 0s (free)."""
+        """Convertir el costmap en una cuadrícula 2D de 1s (ocupado) y 0s (libre)."""
         width = costmap.info.width
         height = costmap.info.height
         grid = [[0 for _ in range(width)] for _ in range(height)]
@@ -161,7 +162,7 @@ class ExploreController(Node):
         return grid
 
     def world_to_grid(self, x, y, costmap: OccupancyGrid):
-        """Convert world coordinates to grid coordinates."""
+        """Convertir coordenadas del mundo a coordenadas de la cuadrícula."""
         origin_x = costmap.info.origin.position.x
         origin_y = costmap.info.origin.position.y
         resolution = costmap.info.resolution
@@ -170,7 +171,7 @@ class ExploreController(Node):
         return gx, gy
 
     def grid_to_world(self, gx, gy, costmap: OccupancyGrid):
-        """Convert grid coordinates back to world coordinates."""
+        """Convertir coordenadas de la cuadrícula de nuevo a coordenadas del mundo."""
         origin_x = costmap.info.origin.position.x
         origin_y = costmap.info.origin.position.y
         resolution = costmap.info.resolution
@@ -179,7 +180,7 @@ class ExploreController(Node):
         return x, y
 
     def _extract_cluster(self, grid, gx, gy):
-        """Simple flood fill to extract a connected cluster of occupied cells."""
+        """Rellenado sencillo para extraer un conjunto conectado de celdas ocupadas."""
         width = len(grid[0])
         height = len(grid)
         if gx < 0 or gy < 0 or gx >= width or gy >= height:
@@ -202,7 +203,7 @@ class ExploreController(Node):
         return cluster
 
     def _cluster_center(self, cluster, costmap: OccupancyGrid):
-        """Return the world coordinates for the center of a cluster."""
+        """Devolver las coordenadas del mundo para el centro de un clúster."""
         if not cluster:
             return None, None
         xs = [c[0] for c in cluster]
@@ -213,8 +214,8 @@ class ExploreController(Node):
 
     def get_obstacle_points(self,costmap:OccupancyGrid,threshold=99):
         """
-        Extract obstacle points from the costmap based on a threshold.
-        Returns a list of (x, y) coordinates of obstacles.
+        Extraer puntos de obstáculo del costmap basándose en un umbral.
+        Devuelve una lista de coordenadas (x, y) de los obstáculos.
         """
         if costmap is None:
             self.get_logger().warn("No costmap available.")
@@ -227,7 +228,7 @@ class ExploreController(Node):
 
         for i in range(width * height):
             if costmap.data[i] >= threshold:
-                # Convert index to (x, y) coordinates
+                # Convertir índice a coordenadas (x, y)
                 x = (i % width) * resolution + costmap.info.origin.position.x
                 y = (i // width) * resolution + costmap.info.origin.position.y
                 obstacle_points.append((x, y))
@@ -236,16 +237,16 @@ class ExploreController(Node):
 
     def is_duplicate_detection(self, x_map, y_map, x_threshold=0.5, y_threshold=0.5):
         """
-        Check if the given coordinates (x_map, y_map) are already in the vicinity of any stored global detections.
-        A detection is considered duplicate if the new coordinates fall within a 1-meter window (both x and y)
-        of any stored coordinates.
+        Comprobar si las coordenadas dadas (x_map, y_map) ya están cerca de alguna detección global almacenada.
+        Una detección se considera duplicada si cae dentro de una ventana de 1 metro (en x e y)
+        respecto a cualquier coordenada almacenada.
         """
         self.get_logger().info(f"Checking duplicate detection for x_map={x_map}, y_map={y_map}")
         for detection in self.global_detections:
             stored_x = detection["x_map"]
             stored_y = detection["y_map"]
 
-            # Check if the new coordinates are within the vicinity of the stored coordinates
+            # Comprobar si las nuevas coordenadas están dentro de la vecindad de las guardadas
             if abs(x_map - stored_x) <= x_threshold and abs(y_map - stored_y) <= y_threshold:
                 self.get_logger().info(
                     f"Duplicate detection found: x_map={x_map:.2f}, y_map={y_map:.2f} is within the vicinity of stored detection x_map={stored_x:.2f}, y_map={stored_y:.2f}."
@@ -255,17 +256,17 @@ class ExploreController(Node):
 
     def save_detections_to_yaml(self):
         """
-        Save the global detections to a YAML file.
+        Guardar las detecciones globales en un archivo YAML.
         """
         try:
-            # Convert NumPy objects to standard Python types
+            # Convertir objetos de NumPy a tipos estándar de Python
             detections_to_save = []
             for detection in self.global_detections:
                 detections_to_save.append({
                     "color": detection["color"],
                     "timestamp": detection["timestamp"],
-                    "x_map": float(detection["x_map"]),  # Convert to float
-                    "y_map": float(detection["y_map"])   # Convert to float
+                    "x_map": float(detection["x_map"]),  # Convertir a float
+                    "y_map": float(detection["y_map"])   # Convertir a float
                 })
 
             with open(self.yaml_file_path, 'w') as yaml_file:
@@ -275,23 +276,23 @@ class ExploreController(Node):
             self.get_logger().error(f"Failed to save detections to YAML file: {e}")
 
     def marker_creation(self, final_angle, t_detect, distance):
-        # Define the maximum distance for marking
-        max_distance = 2.0  # Limit to 2 meters
+        # Definir la distancia máxima para colocar el marcador
+        max_distance = 2.0  # Límite de 2 metros
 
-        # Check if the object is within the allowed distance
+        # Comprobar si el objeto está dentro de la distancia permitida
         if distance > max_distance:
             self.get_logger().info(
                 f"Object at distance {distance:.2f} m exceeds the maximum allowed distance of {max_distance} m. Marker not created."
             )
             return
 
-        # Compute (x, y) in robot frame using the final angle
+        # Calcular (x, y) en el marco del robot usando el ángulo final
         x_robot = distance * math.cos(final_angle)
         y_robot = distance * math.sin(final_angle)
 
         self.get_logger().info(f"Computed object coordinates in robot frame: x={x_robot:.2f}, y={y_robot:.2f}")
 
-        # Wrap the local point in a PointStamped living in base_link
+        # Envolver el punto local en un PointStamped en el marco base_link
         pt_base = PointStamped()
         pt_base.header.stamp = self.get_clock().now().to_msg()
         pt_base.header.frame_id = "base_link"
@@ -299,7 +300,7 @@ class ExploreController(Node):
 
         try:
             self.get_logger().info(f"Attempting TF transformation for x_robot={x_robot}, y_robot={y_robot}")
-            for _ in range(3):  # Retry up to 3 times
+            for _ in range(3):  # Reintentar hasta 3 veces
                 try:
                     transform = self.tf_buffer.lookup_transform("map", "base_link", rclpy.time.Time())
                     break
@@ -317,18 +318,18 @@ class ExploreController(Node):
             self.get_logger().warn(f"TF transform failed: {e}")
             return
 
-        # Optionally adjust coordinates using the costmap
+        # Ajustar las coordenadas usando el costmap, si es necesario
         obstacle_points = self.get_obstacle_points(self.latest_costmap)
         x_map, y_map = self.correction_via_costmap(x_map, y_map, obstacle_points)
 
-        # Check for duplicate detection after correction
+        # Comprobar detección duplicada después de la corrección
         if self.is_duplicate_detection(x_map, y_map):
             self.get_logger().info(
                 f"Duplicate detection discarded: x_map={x_map:.2f}, y_map={y_map:.2f}."
             )
             return
 
-        # Create and publish the RViz marker
+        # Crear y publicar el marcador para RViz
         marker = Marker()
         marker.header.frame_id = "map"
         marker.header.stamp = self.get_clock().now().to_msg()
@@ -349,7 +350,7 @@ class ExploreController(Node):
             f'🔴 Red detected at angle={final_angle * (180.0 / math.pi):.2f}°, timestamp={t_detect}. Marker placed at (x_map={x_map:.2f}, y_map={y_map:.2f}). Marker ID: {self.marker_id}.'
         )
 
-        # Add the detection to the global detections list
+        # Añadir la detección a la lista global de detecciones
         self.global_detections.append({
             "color": "red",
             "x_map": x_map,
@@ -357,23 +358,23 @@ class ExploreController(Node):
             "timestamp": self.get_clock().now().nanoseconds
         })
 
-        # Save the updated detections to the YAML file
+        # Guardar las detecciones actualizadas en el archivo YAML
         self.save_detections_to_yaml()
 
-        # Notify other components that a red object has been marked
+        # Notificar a otros componentes que se ha marcado un objeto rojo
         self.mark_pub.publish(Bool(data=True))
 
-        # Increment the marker ID
+        # Incrementar el ID del marcador
         self.marker_id += 1
 
-        # Limit the size of the global detections list
+        # Limitar el tamaño de la lista de detecciones globales
         if len(self.global_detections) > 100:
             self.global_detections.pop(0)
 
     def correction_via_costmap(self, x_map, y_map, obstacle_points, radius=0.5):
         """
-        Correct the given (x_map, y_map) coordinates by snapping to the nearest obstacle point
-        in the costmap or finding an isolated object along the line from the robot to the marker.
+        Corregir las coordenadas (x_map, y_map) ajustándolas al obstáculo más cercano
+        en el costmap o encontrando un objeto aislado a lo largo de la línea del robot al marcador.
         """
         if self.latest_costmap is None:
             self.get_logger().warn("No costmap available for correction.")
@@ -390,7 +391,7 @@ class ExploreController(Node):
         width = len(grid[0])
         height = len(grid)
 
-        # Helper to validate a cluster as an isolated object
+        # Función auxiliar para validar un clúster como objeto aislado
         def valid_cluster(cl):
             if not cl:
                 return False
@@ -399,7 +400,7 @@ class ExploreController(Node):
             w = max(xs) - min(xs) + 1
             h = max(ys) - min(ys) + 1
             area = len(cl)
-            # Heuristic: discard very large clusters (likely walls)
+            # Heurística: descartar clústeres muy grandes (probablemente paredes)
             return area < 400 and w < 20 and h < 20
 
         if 0 <= gx < width and 0 <= gy < height and grid[gy][gx] == 1:
@@ -434,11 +435,11 @@ class ExploreController(Node):
         try:
             self.get_logger().info("Debug: Entering object_detection method")
             self.get_logger().info(f"Debug: Received message: {msg.data}")
-            # Parse the incoming message
+            # Analizar el mensaje entrante
             data_parts = msg.data.split(',')
             color = data_parts[0].strip()
             angle_rad = float(data_parts[1].split('=')[1])
-            t_detect = float(data_parts[2].split('=')[1])  # Use floating-point timestamp
+            t_detect = float(data_parts[2].split('=')[1])  # Usar marca de tiempo en flotante
 
             self.detected_data.append({
                 'color': color,
@@ -446,9 +447,9 @@ class ExploreController(Node):
                 'timestamp': t_detect
             })
 
-            # FIRST OBJECT CONTACT --------------------------------------------------
+            # PRIMER CONTACTO CON EL OBJETO --------------------------------------------------
             if color.lower() == 'red' and not self.stop_sent:
-                # Find the scan whose header.stamp is nearest to t_detect
+                # Encontrar el escaneo cuyo header.stamp esté más cerca de t_detect
                 closest_scan = None
                 best_diff = float('inf')
                 for scan_msg in self.scan_buffer:
@@ -459,16 +460,16 @@ class ExploreController(Node):
                         best_diff = d
                         closest_scan = scan_msg
 
-                max_diff = 0.3  # Allow up to x seconds difference
+                max_diff = 0.3  # Permitir hasta x segundos de diferencia
                 if best_diff > max_diff:
                     self.get_logger().warn(f"No LiDAR scan found within {max_diff} seconds of the detection timestamp.")
                     return
 
                 if closest_scan is None:
-                    closest_scan = self.scan_buffer[-1]  # Use the most recent scan
+                    closest_scan = self.scan_buffer[-1]  # Usar el escaneo más reciente
                     self.get_logger().warn("No close match found; using the most recent scan as fallback.")
 
-                # Wrap angle_rad into [angle_min, angle_max]
+                # Ajustar angle_rad al rango [angle_min, angle_max]
                 wrapped_angle = (-angle_rad) % (2 * math.pi)
                 epsilon = 1e-6
                 if wrapped_angle > closest_scan.angle_max - epsilon:
@@ -477,44 +478,44 @@ class ExploreController(Node):
                     self.get_logger().warn(f"Angle {wrapped_angle:.2f} rad is outside the LiDAR scan range [{closest_scan.angle_min:.2f}, {closest_scan.angle_max:.2f}].")
                     return
 
-                # Compute index i for the wrapped angle
+                # Calcular el índice i para el ángulo ajustado
                 i_wrapped = int(round((wrapped_angle - closest_scan.angle_min) / closest_scan.angle_increment))
-                i_wrapped = max(0, min(i_wrapped, len(closest_scan.ranges) - 1))  # Ensure index is within bounds
+                i_wrapped = max(0, min(i_wrapped, len(closest_scan.ranges) - 1))  # Asegurar que el índice esté dentro de los límites
 
-                # Debug logs for computed values
+                # Registros de depuración para los valores calculados
                 self.get_logger().info(f"Wrapped angle: {wrapped_angle:.2f} rad --- {wrapped_angle * (180.0 / math.pi):.2f}°")
                 self.get_logger().info(f"Computed wrapped index: {i_wrapped}, angle_min: {closest_scan.angle_min:.2f}, angle_max: {closest_scan.angle_max:.2f}, angle_increment: {closest_scan.angle_increment:.6f}")
                 self.get_logger().info(f"Distance at wrapped index {i_wrapped}: {closest_scan.ranges[i_wrapped]:.2f}")
 
-                # Get the distance at the computed index
+                # Obtener la distancia en el índice calculado
                 distance = closest_scan.ranges[i_wrapped]
                 if math.isinf(distance) or math.isnan(distance) or distance <= 0.0:
                     self.get_logger().warn("LiDAR return invalid at that angle; optionally try the next closest scan.")
                     return
 
-                # Check if the object is within 1.9 meters
+                # Comprobar si el objeto está dentro de 1.9 metros
                 if distance > 1.5:
                     self.get_logger().info(f"Object detected at {distance:.2f} m, which exceeds the 1.9 m threshold. Clustering will not start.")
                     return
 
 
-                # OBJECT DETECTION USING CLUSTERING ----------------------------------------------
+                # DETECCIÓN DE OBJETOS MEDIANTE AGRUPAMIENTO ----------------------------------------------
                 import numpy as np
                 from scipy.ndimage import label
 
 
-                # Parameters
-                same_object_thr = self.name_object_thr  # Minimum distance to consider a valid object
-                I_min = self.I_min  # Minimum intensity threshold
+                # Parámetros
+                same_object_thr = self.name_object_thr  # Distancia mínima para considerar un objeto válido
+                I_min = self.I_min  # Umbral mínimo de intensidad
                 I_max = self.I_max
-                bw_min = self.bw_min  # Minimum physical width of the cluster in meters
-                bw_max = self.bw_max  # Maximum physical width of the cluster in meters
+                bw_min = self.bw_min  # Ancho físico mínimo del clúster en metros
+                bw_max = self.bw_max  # Ancho físico máximo del clúster en metros
 
-                # Define the clustering zone around i_wrapped
-                cluster_radius = self.cluster_radius  # Number of indexes to include on each side
-                num_indexes = len(closest_scan.ranges)  # Total number of LiDAR indexes
+                # Definir la zona de agrupamiento alrededor de i_wrapped
+                cluster_radius = self.cluster_radius  # Número de índices a incluir a cada lado
+                num_indexes = len(closest_scan.ranges)  # Número total de índices del LiDAR
 
-                # Compute the range of indexes to consider, handling wrap-around
+                # Calcular el rango de índices a considerar, manejando el wrap-around
                 start_index = (i_wrapped - cluster_radius) % num_indexes
                 end_index = (i_wrapped + cluster_radius) % num_indexes
 
@@ -522,12 +523,12 @@ class ExploreController(Node):
                     zone_mask = np.zeros(num_indexes, dtype=bool)
                     zone_mask[start_index:end_index + 1] = True
                 else:
-                    # Wrap-around case: split into two ranges
+                    # Caso con wrap-around: dividir en dos rangos
                     zone_mask = np.zeros(num_indexes, dtype=bool)
                     zone_mask[start_index:] = True
                     zone_mask[:end_index + 1] = True
 
-                # Apply the zone mask to ranges and intensities
+                # Aplicar la máscara de zona a distancias e intensidades
                 ranges_arr = np.array(closest_scan.ranges)
                 intens_arr = np.array(closest_scan.intensities)
                 valid_range_mask = np.isfinite(ranges_arr) & (ranges_arr > 0.1) & (ranges_arr <= 2.0)
@@ -540,12 +541,12 @@ class ExploreController(Node):
                     candidate_mask = valid_range_mask & valid_intensity_mask & zone_mask
 
 
-                # Adjacent-similar mask within the clustering zone
+                # Máscara de similitud entre adyacentes dentro de la zona de agrupamiento
                 deltas = np.abs(ranges_arr[:-1] - ranges_arr[1:]) <= same_object_thr
                 adjacent_both_valid = candidate_mask[:-1] & candidate_mask[1:]
                 cluster_mask_1d = deltas & adjacent_both_valid
 
-                # Label connected runs
+                # Etiquetar secuencias conectadas
                 labeled, num_clust = label(cluster_mask_1d)
                 clusters = []
                 for cid in range(1, num_clust + 1):
@@ -555,21 +556,21 @@ class ExploreController(Node):
                     beam_indices = np.arange(start, end + 1)
                     clusters.append(beam_indices)
 
-                # Filter clusters with more than 1 reading
+                # Filtrar clústeres con más de una lectura
                 valid_clusters = [c for c in clusters if len(c) > 1]
 
-                # Filter clusters based on physical width
+                # Filtrar clústeres según el ancho físico
                 filtered_clusters = []
                 for c in valid_clusters:
-                    start_idx = c[0]  # First index of the cluster
-                    end_idx = c[-1]  # Last index of the cluster
+                    start_idx = c[0]  # Primer índice del clúster
+                    end_idx = c[-1]  # Último índice del clúster
 
-                    # Calculate the angular span of the cluster
-                    angular_span = (end_idx - start_idx) * closest_scan.angle_increment  # Angular span in radians
+                    # Calcular el ángulo barrido por el clúster
+                    angular_span = (end_idx - start_idx) * closest_scan.angle_increment  # Ángulo en radianes
 
-                    # Use the median distance of the cluster to calculate the physical width
-                    med_r = np.median(ranges_arr[c])  # Median distance of the cluster
-                    cluster_width = 2 * med_r * math.sin(angular_span / 2)  # Physical width using trigonometry
+                    # Usar la distancia media del clúster para calcular el ancho físico
+                    med_r = np.median(ranges_arr[c])  # Distancia media del clúster
+                    cluster_width = 2 * med_r * math.sin(angular_span / 2)  # Ancho físico usando trigonometría
 
                     if bw_min <= cluster_width <= bw_max:
                         filtered_clusters.append(c)
@@ -587,21 +588,21 @@ class ExploreController(Node):
 
                 if not valid_clusters:
                     self.get_logger().warn("No valid clusters found. Exiting object detection process.")
-                    return  # Exit the method early
+                    return  # Salir del método
 
-                # Find the cluster closest to the detected red object index and nearest to the robot
+                # Buscar el clúster más cercano al índice del objeto rojo detectado y al robot
                 best_cluster = None
-                best_score = float('inf')  # Lower score is better
+                best_score = float('inf')  # Un valor menor es mejor
 
                 for c in valid_clusters:
-                    center_idx = int(round(np.mean(c)))  # Center index of the cluster
-                    distance = ranges_arr[center_idx]  # Distance of the cluster center
+                    center_idx = int(round(np.mean(c)))  # Índice central del clúster
+                    distance = ranges_arr[center_idx]  # Distancia del centro del clúster
 
-                    # Adjusted scoring formula:
-                    # - Penalize clusters farther from the robot
-                    # - Penalize clusters farther from the detected red object
-                    proximity_penalty = abs(center_idx - i_wrapped)  # Penalize based on distance from i_wrapped
-                    score = distance + 0.5 * proximity_penalty  # Distance has more weight than proximity penalty
+                    # Fórmula de puntuación ajustada:
+                    # - Penaliza clústeres más alejados del robot
+                    # - Penaliza clústeres más alejados del objeto rojo detectado
+                    proximity_penalty = abs(center_idx - i_wrapped)  # Penalizar según la distancia a i_wrapped
+                    score = distance + 0.5 * proximity_penalty  # La distancia pesa más que la penalización
 
                     self.get_logger().info(
                         f"Cluster center index: {center_idx}, Distance: {distance:.2f}, "
@@ -612,23 +613,23 @@ class ExploreController(Node):
                         best_score = score
                         best_cluster = c
 
-                # Use the best cluster
+                # Usar el mejor clúster
                 if best_cluster is not None:
-                    i_object = int(round(np.mean(best_cluster)))  # Center index of the best cluster
+                    i_object = int(round(np.mean(best_cluster)))  # Índice central del mejor clúster
                     distance = ranges_arr[i_object]
 
-                    # Final angle
+                    # Ángulo final
                     final_angle = closest_scan.angle_min + i_object * closest_scan.angle_increment
                 else:
                     self.get_logger().warn("No suitable cluster found. Exiting object detection process.")
                     return
 
-                # Debug log for the final angle
+                # Registro de depuración para el ángulo final
                 self.get_logger().info(f"Final angle for object: {final_angle:.2f} rad --- {final_angle * (180.0 / math.pi):.2f}°")
                 self.get_logger().info(f"Final index: {i_object}")
                 self.get_logger().info(f"Distance final index {i_object}: {distance:.2f}")
 
-                # Call marker_creation
+                # Llamar a marker_creation
                 self.marker_creation(final_angle, t_detect, distance)
 
         except (IndexError, ValueError) as e:
@@ -636,11 +637,11 @@ class ExploreController(Node):
 
     def scan_callback(self, scan_msg: LaserScan):
         """
-        Buffer the most recent 20 LaserScan messages.
+        Almacenar en buffer los 20 mensajes de LaserScan más recientes.
         """
         self.scan_buffer.append(scan_msg)
-        #self.get_logger().debug(f"Buffered LiDAR scan at {scan_msg.header.stamp.sec}.{scan_msg.header.stamp.nanosec}, total buffered: {len(self.scan_buffer)}")
-        #self.get_logger().info(f"Buffered LiDAR scan with {len(scan_msg.ranges)} ranges")
+        #self.get_logger().debug(f"Escaneo LiDAR almacenado en {scan_msg.header.stamp.sec}.{scan_msg.header.stamp.nanosec}, total almacenado: {len(self.scan_buffer)}")
+        #self.get_logger().info(f"Escaneo LiDAR con {len(scan_msg.ranges)} mediciones almacenadas")
 
 def main(args=None):
     rclpy.init(args=args)

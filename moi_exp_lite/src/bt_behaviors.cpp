@@ -12,8 +12,9 @@
 
 using namespace BT;
 
+// Nodos personalizados utilizados por el árbol de comportamiento principal
 
-// Decorator that repeats its child until SUCCESS is returned
+// Decorador que repite su hijo hasta que devuelva SUCCESS
 class RepeatUntilSuccess : public DecoratorNode
 {
 public:
@@ -45,7 +46,7 @@ public:
   }
 };
 
-// Action to initialize camera calibrations
+// Acción para inicializar las calibraciones de la cámara
 class StartDetectObject : public SyncActionNode {
 public:
   StartDetectObject(const std::string& name, const BT::NodeConfiguration& conf)
@@ -68,7 +69,7 @@ public:
   }
 };
 
-// Action to start explore_controller and color detector
+// Acción para iniciar explore_controller y el detector de color
 class StartExploreController : public SyncActionNode {
 public:
   StartExploreController(const std::string& name, const BT::NodeConfiguration& conf)
@@ -101,7 +102,7 @@ public:
   }
 };
 
-// Action to launch explorer node
+// Acción para lanzar el nodo explorer
 class StartExplorer : public SyncActionNode {
 public:
   StartExplorer(const std::string& name, const BT::NodeConfiguration& conf)
@@ -126,7 +127,7 @@ public:
   }
 };
 
-// Condition node: check if three red detections exist
+// Nodo de condición: comprobar si existen tres detecciones rojas
 class HaveThreeDetections : public ConditionNode {
 public:
   HaveThreeDetections(const std::string& name, const BT::NodeConfiguration& conf)
@@ -159,7 +160,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr sub_;
 };
 
-// Action to stop explorer
+// Acción para detener el nodo explorer
 class StopExplorer : public SyncActionNode {
 public:
   StopExplorer(const std::string& name, const BT::NodeConfiguration& conf)
@@ -168,14 +169,14 @@ public:
   static BT::PortsList providedPorts() { return {}; }
   NodeStatus tick() override {
     RCLCPP_INFO(rclcpp::get_logger("bt_behaviors"), "Stopping explorer node");
-    // Send SIGINT specifically to the explorer node process so that
-    // other nodes like explore_controller keep running
+    // Enviar SIGINT específicamente al proceso del nodo explorer
+    // para que otros nodos como explore_controller sigan ejecutándose
     std::system("pkill -2 -f explore_node &");
     return NodeStatus::SUCCESS;
   }
 };
 
-// Action to command nav2 to return to initial pose
+// Acción para ordenar a nav2 que regrese a la pose inicial
 class ReturnToInitialPose : public StatefulActionNode {
 public:
   ReturnToInitialPose(const std::string& name, const BT::NodeConfiguration& conf)
